@@ -1,6 +1,6 @@
 *.zip
-tools/
-seeds.txt
+tester/
+visualizer/
 in/
 out/
 vis/
