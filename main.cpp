@@ -295,6 +295,7 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
                         int i = a.field[y][x];
                         if (a.machine[y][x]) continue;
                         assert (path[y][x].size() >= 2);
+                        if (vegetables[i].end - a.turn + 1 < path[y][x].size() - 1) continue;
                         double value = vegetables[i].value;
                         value /= path[y][x].size() - 1;
                         order.emplace_back(value, i);
@@ -369,6 +370,7 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
                         int i = a.field[y][x];
                         if (a.machine[y][x]) continue;
                         assert (path[y][x].size() >= 2);
+                        if (vegetables[i].end - a.turn + 1 < path[y][x].size() - 1) continue;
                         double value = vegetables[i].value;
                         if (path[y][x].size() - 1 < TENTACLE_LENGTH) {
                             value *= a.machine_count;
