@@ -422,6 +422,13 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
         go();
     }
 
+    int64_t total_earned = a.money;
+    REP (i, a.machine_count) {
+        total_earned += cubed(i + 1);
+    }
+    cerr << "total earned = " << total_earned << endl;
+    cerr << "used machine = " << a.machine_count << endl;
+    cerr << "last money = " << a.money << endl;
     return a.ans;
 }
 
