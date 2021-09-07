@@ -197,21 +197,21 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
         0b0000000000000000,
         0b0000000000000000,
         0b0000000000000000,
+        0b0000000000000000,
         0b1111111111111111,
-        0b0000000000001000,
-        0b0000000000001000,
-        0b0000000000001000,
-        0b0000000000001000,
+        0b0000000000010000,
+        0b0000000000010000,
+        0b0000000000010000,
+        0b0000000000010000,
+        0b0000000000010000,
+        0b0000000000010000,
         0b1111111111111111,
-        0b0000000000001000,
-        0b0000000000001000,
-        0b0000000000001000,
-        0b0000000000001000,
-        0b1111111111111111,
+        0b0000000000000000,
+        0b0000000000000000,
         0b0000000000000000,
         0b0000000000000000,
     }};
-    constexpr int TENTACLE_LENGTH = 3;  // 触手の長さ
+    constexpr int TENTACLE_LENGTH = 4;  // 触手の長さ
     constexpr int SNAKE_LENGTH = 16;  // ヘビの最大の長さ
     vector<pair<int, int>> movable;
     array<array<bool, N>, N> fixed = {};
@@ -251,9 +251,10 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
                 REP (y, N) {
                     REP (x, N) {
                         if ((plan[y] & (1 << x)) and not a.machine[y][x]) {
-                            if (y >= 4 and x == 0 and not a.machine[y][1]) continue;
-                            if (y >= 4 and x == 1 and not a.machine[y][2]) continue;
-                            if (y >= 4 and x == 2 and not a.machine[y][3]) continue;
+                            if (x == 0 and not a.machine[y][1]) continue;
+                            if (x == 1 and not a.machine[y][2]) continue;
+                            if (x == 2 and not a.machine[y][3]) continue;
+                            if (x == 3 and not a.machine[y][4]) continue;
                             a.buy(y, x);
                             fixed[y][x] = true;
                             return;
