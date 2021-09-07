@@ -29,6 +29,14 @@ private:
     uint32_t a, b, c, d;
 };
 
+int64_t squared(int64_t x) {
+    return x * x;
+}
+
+int64_t cubed(int64_t x) {
+    return x * x * x;
+}
+
 constexpr int N = 16;
 constexpr int M = 5000;
 constexpr int T = 1000;
@@ -71,17 +79,113 @@ inline pair<int, int> unpack_point(int packed) {
 template <class RandomEngine>
 array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine& gen, chrono::high_resolution_clock::time_point clock_end) {
     chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
+
     array<command_t, T> ans;
-    REP (turn, T) {
-        ans[turn] = command_pass;
+
+    int turn = 0;
+    int64_t money = 1;
+    array<array<bool, N>, N> machine = {};
+    int machine_count = 0;
+    array<array<int, N>, N> field;
+    REP (y, N) {
+        fill(ALL(field[y]), -1);
     }
+
+    auto pass = [&]() {
+        ans[turn] = command_pass;
+    };
+
+    auto buy = [&](int y, int x) {
+        int64_t cost = cubed(machine_count + 1ll);
+        assert (money >= cost);
+        assert (not machine[y][x]);
+        ans[turn] = command_buy(y, x);
+        money -= cost;
+        machine[y][x] = true;
+        ++ machine_count;
+    };
+
+    auto move = [&](int y, int x, int ny, int nx) {
+        assert (machine[y][x]);
+        assert (not machine[ny][nx]);
+        ans[turn] = command_move(y, x, ny, nx);
+        machine[y][x] = false;
+        machine[ny][nx] = true;
+    };
+
+    array<array<int, N>, N> connected_index = {};
+    vector<int> connected_size = {};
+    auto count_connected_machines = [&](int y, int x) -> int {
+        if (connected_index[y][x] != -1) {
+            return connected_size[connected_index[y][x]];
+        }
+        int index = connected_size.size();
+        connected_size.push_back(0);
+        auto go = [&](auto &&go, int y, int x) -> void {
+            connected_index[y][x] = index;
+            ++ connected_size[index];
+            for (int dir : DIRS) {
+                int ny = y + DIR_Y[dir];
+                int nx = x + DIR_X[dir];
+                if (is_on_field(ny, nx) and machine[ny][nx]) {
+                    if (connected_index[ny][nx] == -1) {
+                        go(go, ny, nx);
+                    }
+                }
+            }
+        };
+        go(go, y, x);
+        return connected_size[connected_index[y][x]];
+    };
+
+    int next_vegetable = 0;
+    auto update = [&]() {
+        REP (y, N) {
+            fill(ALL(connected_index[y]), -1);
+        }
+        connected_size.clear();
+
+        while (next_vegetable < M and vegetables[next_vegetable].start == turn) {
+            auto &vegetable = vegetables[next_vegetable];
+            field[vegetable.y][vegetable.x] = next_vegetable;
+            ++ next_vegetable;
+        }
+
+        REP (y, N) {
+            REP (x, N) {
+                if (field[y][x] != -1 and machine[y][x]) {
+                    money += vegetables[field[y][x]].value * count_connected_machines(y, x);
+                    field[y][x] = -1;
+                }
+                if (field[y][x] != -1 and vegetables[field[y][x]].end == turn) {
+                    field[y][x] = -1;
+                }
+            }
+        }
+
+        ++ turn;
+    };
+
+    while (turn < T) {
+        if (cubed(machine_count + 1ll) <= money) {
+            if (machine_count < N) {
+                buy(N / 2, machine_count);
+                update();
+                continue;
+            }
+        }
+
+        pass();
+        update();
+    }
+
     return ans;
 }
 
 int main() {
     constexpr auto TIME_LIMIT = chrono::milliseconds(2000);
     chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
-    xor_shift_128 gen(20210425);
+    xor_shift_128 gen;
 
     int n, m, t; cin >> n >> m >> t;
     assert (n == N);
