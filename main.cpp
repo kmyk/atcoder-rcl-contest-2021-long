@@ -78,8 +78,8 @@ inline pair<int, int> unpack_point(int packed) {
 
 struct game_state {
     const array<vegetable_t, M> vegetables;
-    array<command_t, T> ans;
 
+    array<command_t, T> ans;
     int turn = 0;
     int64_t money = 1;
     array<array<bool, N>, N> machine = {};
@@ -119,17 +119,19 @@ struct game_state {
     };
 
     int next_vegetable = 0;
-    void update() {
-        REP (y, N) {
-            fill(ALL(connected_index[y]), -1);
-        }
-        connected_size.clear();
-
+    void update_add_vegetables() {
         while (next_vegetable < M and vegetables[next_vegetable].start == turn) {
             auto &vegetable = vegetables[next_vegetable];
             field[vegetable.y][vegetable.x] = next_vegetable;
             ++ next_vegetable;
         }
+    };
+
+    void update_remove_vegetables() {
+        REP (y, N) {
+            fill(ALL(connected_index[y]), -1);
+        }
+        connected_size.clear();
 
         REP (y, N) {
             REP (x, N) {
@@ -142,7 +144,11 @@ struct game_state {
                 }
             }
         }
+    };
 
+    void update() {
+        // update_add_vegetables();
+        update_remove_vegetables();
         ++ turn;
     };
 
@@ -177,16 +183,136 @@ template <class RandomEngine>
 array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine& gen, chrono::high_resolution_clock::time_point clock_end) {
     chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
 
+    // NOTE: the left and right is flipped.
+    const array<int, N> plan = {{
+        0b0000000000000000,
+        0b0000000000000000,
+        0b1111111111111111,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b1111111111111111,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b0000000000000001,
+        0b1111111111111111,
+        0b0000000000000000,
+        0b0000000000000000,
+        0b0000000000000000,
+    }};
+    vector<pair<int, int>> movable;
+    array<array<bool, N>, N> fixed = {};
+
     game_state a(vegetables);
-    while (a.turn < T) {
+    int target = -1;
+    auto go = [&]() {
+        a.update_add_vegetables();
+
+        vector<int> order;
+        REP (y, N) {
+            REP (x, N) {
+                if (a.field[y][x] != -1) {
+                    order.push_back(a.field[y][x]);
+                }
+            }
+        }
+        sort(ALL(order), [&](int i, int j) -> bool {
+            return vegetables[i].value > vegetables[j].value;
+        });
+
         if (cubed(a.machine_count + 1ll) <= a.money) {
-            if (a.machine_count < N) {
-                a.buy(N / 2, a.machine_count);
-                continue;
+            if (a.machine_count < 3) {
+                for (int i : order) {
+                    int y = vegetables[i].y;
+                    int x = vegetables[i].x;
+                    if (a.machine[y][x]) continue;
+                    a.buy(y, x);
+                    movable.emplace_back(y, x);
+                    return;
+                }
+            } else {
+                REP (y, N) {
+                    REP (x, N) {
+                        if ((plan[y] & (1 << x)) and not a.machine[y][x]) {
+                            a.buy(y, x);
+                            fixed[y][x] = true;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        array<array<vector<pair<int, int>>, N>, N> path = {};
+        queue<pair<int, int>> que;
+        REP (y, N) {
+            REP (x, N) {
+                if (fixed[y][x]) {
+                    path[y][x].emplace_back(y, x);
+                    que.emplace(y, x);
+                }
+            }
+        }
+        while (not que.empty()) {
+            auto [y, x] = que.front();
+            que.pop();
+            for (int dir : DIRS) {
+                int ny = y + DIR_Y[dir];
+                int nx = x + DIR_X[dir];
+                if (is_on_field(ny, nx) and path[ny][nx].empty()) {
+                    path[ny][nx] = path[y][x];
+                    path[ny][nx].emplace_back(ny, nx);
+                    que.emplace(ny, nx);
+                }
+            }
+        }
+
+        if (target != -1 and a.field[vegetables[target].y][vegetables[target].x] == -1) {
+            target = -1;
+        }
+        if (target == -1) {
+            for (int i : order) {
+                if (a.machine[vegetables[i].y][vegetables[i].x]) continue;
+                target = i;
+                break;
+            }
+        }
+        if (target == -1) {
+            a.pass();
+        }
+
+        vegetable_t trg = vegetables[target];
+        if (path[trg.y][trg.x].empty()) {
+            auto [y, x] = movable[0];
+            if (not a.machine[trg.y][trg.x]) {
+                a.move(y, x, trg.y, trg.x);
+                movable[0] = {trg.y, trg.x};
+                return;
+            }
+        } else {
+            auto p = path[trg.y][trg.x];
+            while (p.size() > movable.size()) {
+                p.erase(p.begin());
+            }
+            REP (i, movable.size()) {
+                auto [y, x] = movable[i];
+                if (count(ALL(p), movable[i])) continue;
+                REP (j, p.size()) {
+                    auto [ny, nx] = p[j];
+                    if (a.machine[ny][nx]) continue;
+                    a.move(y, x, ny, nx);
+                    movable[i] = p[j];
+                    return;
+                }
             }
         }
 
         a.pass();
+    };
+    while (a.turn < T) {
+        go();
     }
 
     return a.ans;
