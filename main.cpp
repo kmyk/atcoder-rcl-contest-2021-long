@@ -76,10 +76,8 @@ inline pair<int, int> unpack_point(int packed) {
     return {packed >> 8, packed & ((1 << 8) - 1)};
 }
 
-template <class RandomEngine>
-array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine& gen, chrono::high_resolution_clock::time_point clock_end) {
-    chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
-
+struct game_state {
+    const array<vegetable_t, M> vegetables;
     array<command_t, T> ans;
 
     int turn = 0;
@@ -87,35 +85,17 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
     array<array<bool, N>, N> machine = {};
     int machine_count = 0;
     array<array<int, N>, N> field;
-    REP (y, N) {
-        fill(ALL(field[y]), -1);
+
+    explicit game_state(const array<vegetable_t, M> &vegetables_)
+            : vegetables(vegetables_) {
+        REP (y, N) {
+            fill(ALL(field[y]), -1);
+        }
     }
-
-    auto pass = [&]() {
-        ans[turn] = command_pass;
-    };
-
-    auto buy = [&](int y, int x) {
-        int64_t cost = cubed(machine_count + 1ll);
-        assert (money >= cost);
-        assert (not machine[y][x]);
-        ans[turn] = command_buy(y, x);
-        money -= cost;
-        machine[y][x] = true;
-        ++ machine_count;
-    };
-
-    auto move = [&](int y, int x, int ny, int nx) {
-        assert (machine[y][x]);
-        assert (not machine[ny][nx]);
-        ans[turn] = command_move(y, x, ny, nx);
-        machine[y][x] = false;
-        machine[ny][nx] = true;
-    };
 
     array<array<int, N>, N> connected_index = {};
     vector<int> connected_size = {};
-    auto count_connected_machines = [&](int y, int x) -> int {
+    int count_connected_machines(int y, int x) {
         if (connected_index[y][x] != -1) {
             return connected_size[connected_index[y][x]];
         }
@@ -139,7 +119,7 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
     };
 
     int next_vegetable = 0;
-    auto update = [&]() {
+    void update() {
         REP (y, N) {
             fill(ALL(connected_index[y]), -1);
         }
@@ -166,20 +146,50 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
         ++ turn;
     };
 
-    while (turn < T) {
-        if (cubed(machine_count + 1ll) <= money) {
-            if (machine_count < N) {
-                buy(N / 2, machine_count);
-                update();
+    void pass() {
+        ans[turn] = command_pass;
+        update();
+    };
+
+    void buy(int y, int x) {
+        int64_t cost = cubed(machine_count + 1ll);
+        assert (money >= cost);
+        assert (not machine[y][x]);
+        ans[turn] = command_buy(y, x);
+        money -= cost;
+        machine[y][x] = true;
+        ++ machine_count;
+        update();
+    };
+
+    void move(int y, int x, int ny, int nx) {
+        assert (machine[y][x]);
+        assert (not machine[ny][nx]);
+        ans[turn] = command_move(y, x, ny, nx);
+        machine[y][x] = false;
+        machine[ny][nx] = true;
+        update();
+    };
+
+};
+
+template <class RandomEngine>
+array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine& gen, chrono::high_resolution_clock::time_point clock_end) {
+    chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
+
+    game_state a(vegetables);
+    while (a.turn < T) {
+        if (cubed(a.machine_count + 1ll) <= a.money) {
+            if (a.machine_count < N) {
+                a.buy(N / 2, a.machine_count);
                 continue;
             }
         }
 
-        pass();
-        update();
+        a.pass();
     }
 
-    return ans;
+    return a.ans;
 }
 
 int main() {
