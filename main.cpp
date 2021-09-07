@@ -211,6 +211,8 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
         0b0000000000000000,
         0b0000000000000000,
     }};
+    constexpr int TENTACLE_LENGTH = 3;  // 触手の長さ
+    constexpr int SNAKE_LENGTH = 16;  // ヘビの最大の長さ
     vector<pair<int, int>> movable;
     array<array<bool, N>, N> fixed = {};
 
@@ -219,28 +221,32 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
     auto go = [&]() {
         a.update_add_vegetables();
 
-        vector<int> order;
-        REP (y, N) {
-            REP (x, N) {
-                if (a.field[y][x] != -1) {
-                    order.push_back(a.field[y][x]);
+        // ヘビからイソギンチャクへ
+        if (a.machine_count > SNAKE_LENGTH and movable.size() > TENTACLE_LENGTH) {
+            REP (ny, N) {
+                REP (nx, N) {
+                    if ((plan[ny] & (1 << nx)) and not a.machine[ny][nx]) {
+                        auto [y, x] = movable.back();
+                        a.move(y, x, ny, nx);
+                        movable.pop_back();
+                        fixed[ny][nx] = true;
+                        return;
+                    }
                 }
             }
         }
-        sort(ALL(order), [&](int i, int j) -> bool {
-            return vegetables[i].value > vegetables[j].value;
-        });
 
+        // 新規購入
         if (cubed(a.machine_count + 1ll) <= a.money) {
-            if (a.machine_count < 3) {
-                for (int i : order) {
-                    int y = vegetables[i].y;
-                    int x = vegetables[i].x;
-                    if (a.machine[y][x]) continue;
-                    a.buy(y, x);
-                    movable.emplace_back(y, x);
-                    return;
-                }
+            if (a.machine_count < SNAKE_LENGTH) {
+                int y, x;
+                do {
+                    y = uniform_int_distribution<int>(0, N - 1)(gen);
+                    x = uniform_int_distribution<int>(0, N - 1)(gen);
+                } while (a.machine[y][x]);
+                a.buy(y, x);
+                movable.insert(movable.begin(), make_pair(y, x));
+                return;
             } else {
                 REP (y, N) {
                     REP (x, N) {
@@ -257,55 +263,142 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
             }
         }
 
-        array<array<vector<pair<int, int>>, N>, N> path = {};
-        queue<pair<int, int>> que;
-        REP (y, N) {
-            REP (x, N) {
-                if (fixed[y][x]) {
-                    path[y][x].emplace_back(y, x);
-                    que.emplace(y, x);
+        if (a.machine_count <= SNAKE_LENGTH) {
+            // ヘビ状態
+
+            // 野菜への距離を測る
+            array<array<vector<pair<int, int>>, N>, N> path = {};
+            queue<pair<int, int>> que;
+            auto [y0, x0] = movable.back();
+            path[y0][x0].emplace_back(y0, x0);
+            que.emplace(y0, x0);
+            while (not que.empty()) {
+                auto [y, x] = que.front();
+                que.pop();
+                for (int dir : DIRS) {
+                    int ny = y + DIR_Y[dir];
+                    int nx = x + DIR_X[dir];
+                    if (is_on_field(ny, nx) and path[ny][nx].empty()) {
+                        path[ny][nx] = path[y][x];
+                        path[ny][nx].emplace_back(ny, nx);
+                        que.emplace(ny, nx);
+                    }
                 }
             }
-        }
-        while (not que.empty()) {
-            auto [y, x] = que.front();
-            que.pop();
-            for (int dir : DIRS) {
-                int ny = y + DIR_Y[dir];
-                int nx = x + DIR_X[dir];
-                if (is_on_field(ny, nx) and path[ny][nx].empty()) {
-                    path[ny][nx] = path[y][x];
-                    path[ny][nx].emplace_back(ny, nx);
-                    que.emplace(ny, nx);
+
+            // 野菜を評価順ソートする
+            vector<pair<double, int>> order;
+            REP (y, N) {
+                REP (x, N) {
+                    if (a.field[y][x] != -1) {
+                        int i = a.field[y][x];
+                        if (a.machine[y][x]) continue;
+                        assert (path[y][x].size() >= 2);
+                        double value = vegetables[i].value;
+                        value /= path[y][x].size() - 1;
+                        order.emplace_back(value, i);
+                    }
                 }
             }
-        }
+            sort(ALL(order));
+            reverse(ALL(order));
 
-        if (target != -1 and a.field[vegetables[target].y][vegetables[target].x] == -1) {
-            target = -1;
-        }
-        if (target == -1) {
-            for (int i : order) {
-                if (a.machine[vegetables[i].y][vegetables[i].x]) continue;
-                target = i;
-                break;
+            // 目標とする野菜を更新
+            if (target != -1 and a.field[vegetables[target].y][vegetables[target].x] == -1) {
+                target = -1;
             }
-        }
-        if (target == -1) {
-            a.pass();
-            return;
-        }
-
-        vegetable_t trg = vegetables[target];
-        if (path[trg.y][trg.x].empty()) {
-            auto [y, x] = movable[0];
-            if (not a.machine[trg.y][trg.x]) {
-                a.move(y, x, trg.y, trg.x);
-                movable[0] = {trg.y, trg.x};
+            if (target == -1) {
+                for (auto [value, i] : order) {
+                    if (a.machine[vegetables[i].y][vegetables[i].x]) continue;
+                    target = i;
+                    break;
+                }
+            }
+            if (target == -1) {
+                a.pass();
                 return;
             }
+
+            // 尻尾を次の頭にする
+            assert (not path[vegetables[target].y][vegetables[target].x].empty());
+            auto p = path[vegetables[target].y][vegetables[target].x];
+            REP (j, p.size()) {
+                auto [ny, nx] = p[j];
+                if (a.machine[ny][nx]) continue;
+                auto [y, x] = movable[0];
+                a.move(y, x, ny, nx);
+                movable.erase(movable.begin());
+                movable.emplace_back(ny, nx);
+                return;
+            }
+
         } else {
-            auto p = path[trg.y][trg.x];
+            // イソギンチャク状態
+
+            // 野菜への距離を測る
+            array<array<vector<pair<int, int>>, N>, N> path = {};
+            queue<pair<int, int>> que;
+            REP (y, N) {
+                REP (x, N) {
+                    if (fixed[y][x]) {
+                        path[y][x].emplace_back(y, x);
+                        que.emplace(y, x);
+                    }
+                }
+            }
+            while (not que.empty()) {
+                auto [y, x] = que.front();
+                que.pop();
+                for (int dir : DIRS) {
+                    int ny = y + DIR_Y[dir];
+                    int nx = x + DIR_X[dir];
+                    if (is_on_field(ny, nx) and path[ny][nx].empty()) {
+                        path[ny][nx] = path[y][x];
+                        path[ny][nx].emplace_back(ny, nx);
+                        que.emplace(ny, nx);
+                    }
+                }
+            }
+
+            // 野菜を評価順ソートする
+            vector<pair<double, int>> order;
+            REP (y, N) {
+                REP (x, N) {
+                    if (a.field[y][x] != -1) {
+                        int i = a.field[y][x];
+                        if (a.machine[y][x]) continue;
+                        assert (path[y][x].size() >= 2);
+                        double value = vegetables[i].value;
+                        if (path[y][x].size() - 1 < TENTACLE_LENGTH) {
+                            value *= a.machine_count;
+                            value /= path[y][x].size() - 1;
+                        }
+                        order.emplace_back(value, i);
+                    }
+                }
+            }
+            sort(ALL(order));
+            reverse(ALL(order));
+
+            // 目標とする野菜を更新
+            if (target != -1 and a.field[vegetables[target].y][vegetables[target].x] == -1) {
+                target = -1;
+            }
+            if (target == -1) {
+                for (auto [value, i] : order) {
+                    if (a.machine[vegetables[i].y][vegetables[i].x]) continue;
+                    target = i;
+                    break;
+                }
+            }
+            if (target == -1) {
+                a.pass();
+                return;
+            }
+
+            // 触手を移動させる
+            assert (not path[vegetables[target].y][vegetables[target].x].empty());
+            auto p = path[vegetables[target].y][vegetables[target].x];
             while (p.size() > movable.size()) {
                 p.erase(p.begin());
             }
