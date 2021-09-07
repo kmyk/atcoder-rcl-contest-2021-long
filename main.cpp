@@ -177,6 +177,15 @@ struct game_state {
         update();
     };
 
+    void apply(command_t cmd) {
+        if (cmd[0] == -1) {
+            pass();
+        } else if (cmd[2] == -1) {
+            buy(cmd[0], cmd[1]);
+        } else {
+            move(cmd[0], cmd[1], cmd[2], cmd[3]);
+        }
+    }
 };
 
 template <class RandomEngine>
@@ -187,18 +196,18 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
     const array<int, N> plan = {{
         0b0000000000000000,
         0b0000000000000000,
-        0b1111111111111111,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b1111111111111111,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b0000000000000001,
-        0b1111111111111111,
         0b0000000000000000,
+        0b1111111111111111,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b1111111111111111,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b0000000000001000,
+        0b1111111111111111,
         0b0000000000000000,
         0b0000000000000000,
     }};
@@ -236,6 +245,9 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
                 REP (y, N) {
                     REP (x, N) {
                         if ((plan[y] & (1 << x)) and not a.machine[y][x]) {
+                            if (y >= 4 and x == 0 and not a.machine[y][1]) continue;
+                            if (y >= 4 and x == 1 and not a.machine[y][2]) continue;
+                            if (y >= 4 and x == 2 and not a.machine[y][3]) continue;
                             a.buy(y, x);
                             fixed[y][x] = true;
                             return;
@@ -281,6 +293,7 @@ array<command_t, T> solve(const array<vegetable_t, M>& vegetables, RandomEngine&
         }
         if (target == -1) {
             a.pass();
+            return;
         }
 
         vegetable_t trg = vegetables[target];
